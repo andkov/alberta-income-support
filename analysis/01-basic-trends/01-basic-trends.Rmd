@@ -1,0 +1,220 @@
+---
+title: "Basic Trends in Income Support Trends"
+author: 
+  - "Andriy Koval"
+output:
+  html_document:
+    keep_md: yes
+    toc: yes
+    toc_float: yes
+    code_folding: show
+    theme: simplex
+    highlight: tango
+editor_options: 
+  chunk_output_type: console
+---
+
+This report explores data on Income Support program taken from the [open.alberta.ca](https://open.alberta.ca/opendata/income-support-caseload-alberta) portal.
+
+<!--  Set the working directory to the repository's base directory; this assumes the report is nested inside of two directories.-->
+```{r, echo=F, message=F, results = 'hide'}
+```
+
+
+```{r set_options, echo=F}
+# cat("Working directory: ", getwd()) # turn on to test the location
+report_render_start_time <- Sys.time()
+# set options shared by all chunks
+knitr::opts_chunk$set(
+  results      = 'show',
+  message      = FALSE,
+  warning      = FALSE,
+  comment      = NA,
+  tidy         = FALSE,
+  dpi        = 400, # dots per inch,
+  out.width  = "900px", # pixels, this affects only the markdown, not the underlying png file.  The height will be scaled appropriately.
+  fig.width    = 11, # inches
+  fig.height   = 6, # inches
+  out.width    = 1200,
+  fig.path     = 'figure-png-com/' # where figures are stored
+)
+echo_chunks    <- FALSE #Toggle for debugging.
+message_chunks <- FALSE #Toggle for debugging.
+options(width=100) # number of characters to display in the output (dflt = 80)
+ggplot2::theme_set(ggplot2::theme_bw()) # common theme for all graphs
+```
+
+
+<!-- Load the sources.  Suppress the output when loading sources. --> 
+```{r load-sources, echo = F}
+source("../../scripts/common-functions.R")
+```
+
+
+<!-- Load packages, or at least verify they're available on the local machine.  Suppress the output when loading packages. -->
+```{r load-packages, message=message_chunks, echo =F}
+library(magrittr)  # pipes
+library(dplyr)     # data wrangling
+library(ggplot2)   # graphs
+library(janitor)   # tidy data
+library(tidyr)     # data wrangling
+library(forcats)   # factors
+library(stringr)   # strings
+library(lubridate) # dates
+```
+
+
+<!-- Load any Global functions and variables declared in the R file.  Suppress the output. --> 
+```{r declare-globals, echo =F}
+# custom function for HTML tables
+neat <- function(x, output_format = "html"){ 
+  # knitr.table.format = output_format
+  if(output_format == "pandoc"){
+    x_t <- knitr::kable(x, format = "pandoc")
+  }else{
+    x_t <- x %>%
+      # x %>%
+      # neat() %>%
+      knitr::kable(format=output_format) %>%
+      kableExtra::kable_styling(
+        bootstrap_options = c("striped", "hover", "condensed","responsive"),
+        # bootstrap_options = c( "condensed"),
+        full_width = F,
+        position = "left"
+      )
+  } 
+  return(x_t)
+}
+# Note: when printing to Word or PDF use `neat(output_format =  "pandoc")`
+
+# functionalize
+draw_trends <- function(
+  d
+  ,selected_measure
+){
+  # browser()
+   target_date <- as.Date("2020-04-15")
+  d1 <- d %>%
+    filter(measure_type == selected_measure)
+  g1 <- d1 %>%
+    {
+    ggplot(., aes(x=date, y=value, color = measure, group = measure))+
+    geom_line(size=4, alpha = .1, color = "black" )+
+    geom_line(size=.5)+
+    # geom_point(aes(x=target_date), shape = 21, fill = NA,size = 2, color = "black",
+               # data = . %>% filter(date == target_date))+
+    # geom_vline(xintercept = as.Date("2020-03-11"), linetype="dashed")+
+    facet_wrap(vars(!!rlang::sym("measure")), scales = "free_y")+
+    scale_y_continuous(labels = scales::comma)+
+    scale_x_date(
+      breaks = seq(as.Date("2005-01-01"),as.Date("2021-12-31"), by = "12 month"), 
+      minor_breaks =  seq(as.Date("2005-01-01"),as.Date("2021-12-31"), by = "3 month"),
+      date_labels ="%Y"
+    )+  
+    labs(
+      title = paste0("Income Support Caseload by ", selected_measure)
+      ,color = "Metric"
+      ,x = "Date"
+      ,y = "Number of cases"
+      ,caption = "Temporal resolution: 1 month       Minor breaks = 3 months"
+    )+
+    theme(legend.position = "none")
+    }
+  g1
+}
+# Test and Dev
+# ds1 %>% draw_trends("Family Composition") 
+
+```
+
+
+```{r load-data, results='show', message=FALSE, echo =F}
+# getwd()
+path_file <- "../../data-public/raw/2021-04-16/goasharedcssspqpqara_research-strategiesopen-data00-open-data-asset-packages-2021is-monthlyis-cu.csv"
+ds0 <- readr::read_csv(path_file) %>% janitor::clean_names()
+
+```
+
+```{r tweak-data,echo = echo_chunks, results='show', message=message_chunks, echo =F}
+ds1 <- ds0 %>%
+  mutate(
+    date = parse_date_time(ref_date,"m%d%Y") %>% as_date() 
+  )
+```
+
+# Take away points 
+
+## Observations
+- There is a sharp increase in income support caseload around 2009, probably related to 2008 housing bubble, after which the number of clients almost doubled ( from 25,000 to 40,0000).   
+- There is a sharp decline in caseload across of [Client Types](#client-type-level),  [Family Composition](family-composition), and [Regions](#regions) after the first quarter of 2020, probably related the introduction of the $2,000 monthly assistance to the unemployed due to COVID in April of 2020.  
+
+
+## Data issues
+
+- When breaking by [CLient Type Level](#client-type-level), there appears to be a typo: instead of `Client Caseload Total` the value of the `measure` column reads `Client Client Caseload Total` for `10/1/2016`
+
+```{r echo=F, eval=F}
+ds1 %>% distinct(measure_type)
+ds1 %>% group_by(measure_type) %>% distinct(measure) %>% arrange(measure_type)
+```
+
+
+
+# Caseload
+```{r graph-6, echo = echo_chunks, results='show', message=message_chunks, fig.height = 4}
+ds1 %>% draw_trends("Total Caseload") + theme(legend.position = "none")
+```
+
+# Client Type Level
+```{r graph-3, echo = echo_chunks, results='show', message=message_chunks}
+ds1 %>% draw_trends("Client Type Level") + geom_point(data = ds1 %>% filter(measure == "Client Client Caseload Total" ))
+cat(" `Client Client Caseload Total` appears to be a typo, so we recode it into `Client Caseload Total` ")
+ds1 %>%
+  mutate(
+    measure = ifelse(measure == "Client Client Caseload Total","Client Caseload Total", measure) 
+  ) %>% 
+  draw_trends("Client Type Level") 
+
+```
+
+
+
+# Family Composition
+```{r graph-1, echo = echo_chunks, results='show', message=message_chunks}
+ds1 %>% draw_trends("Family Composition")
+```
+
+
+
+# Regions
+```{r graph-7, echo = echo_chunks, results='show', message=message_chunks, fig.height = 8}
+ds1 %>% draw_trends("CSS Regions")
+```
+
+
+
+
+
+
+
+Session Information {#session-info}
+===========================================================================
+
+For the sake of documentation and reproducibility, the current report was rendered in the following environment.  Click the line below to expand.
+
+<details>
+  <summary>Environment <span class="glyphicon glyphicon-plus-sign"></span></summary>
+```{r session-info, echo=FALSE}
+if( requireNamespace("devtools", quietly = TRUE) ) {
+  devtools::session_info()
+} else {
+  sessionInfo()
+}
+```
+</details>
+
+```{r session-duration, echo=FALSE}
+report_render_duration_in_seconds <- round(as.numeric(difftime(Sys.time(), report_render_start_time, units="secs")))
+```
+
+Report rendered by `r Sys.info()["user"]` at `r strftime(Sys.time(), "%Y-%m-%d, %H:%M %z")` in `r report_render_duration_in_seconds` seconds.
